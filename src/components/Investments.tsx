@@ -155,6 +155,7 @@ export default function Investments({ user }: { user: any }) {
 
     const q = query(
       collection(db, 'investments', focusedInvestment.id, 'action_items'),
+      where('ownerId', '==', user.uid),
       orderBy('createdAt', 'asc')
     );
 

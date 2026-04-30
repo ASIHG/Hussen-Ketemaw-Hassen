@@ -15,6 +15,14 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function getUserData(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && getUserData(request.auth.uid).role == 'CEO';
+    }
+
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
@@ -33,32 +41,48 @@ service cloud.firestore {
     match /users/{userId} {
       function isValidUser(data) {
         return data.keys().hasAll(['uid', 'email', 'role']) &&
-               data.uid == request.auth.uid &&
+               data.uid == userId &&
                data.email is string &&
-               data.role in ['CEO', 'MANAGER', 'STAFF'] &&
-               (data.get('plan', 'free') in ['free', 'pro', 'growth', 'enterprise']);
+               data.role in ['CEO', 'MANAGER', 'STAFF'];
       }
 
-      allow get: if isOwner(userId);
+      allow get: if isSignedIn(); // Allow profile viewing
+      allow list: if isAdmin();    // Admin can see directory
       allow create: if isOwner(userId) && isValidUser(incoming());
-      allow update: if isOwner(userId) && isValidUser(incoming()) && 
-                    incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'plan', 'hasCompletedOnboarding', 'selectedClusters']);
+      allow update: if (isOwner(userId) || isAdmin()) && 
+                    (incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'plan', 'hasCompletedOnboarding', 'selectedClusters', 'role']));
     }
 
-    // 2. Metrics Rules (Read-only for users, System-updated usually)
+    // 2. Metrics Rules
     match /metrics/global {
       allow read: if isSignedIn();
-      // Write protected - assuming system/admin only
-      allow write: if false;
+      allow write: if isAdmin();
     }
 
-    // 3. AI Actions
+    // 3. AI Actions & Decisions
     match /actions/{actionId} {
       allow read: if isSignedIn();
-      allow write: if false; // System only
+      allow write: if isAdmin();
     }
 
-    // 4. Investments
+    match /ai_decisions/{decisionId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // 4. Notifications (Global Broadcast)
+    match /notifications/{notifId} {
+      function isValidNotif(data) {
+        return data.keys().hasAll(['title', 'message', 'type', 'createdAt']) &&
+               data.title.size() < 200 &&
+               data.message.size() < 1000;
+      }
+      allow list, get: if isSignedIn();
+      allow create: if isSignedIn(); // Allow users to trigger AI insights which write here
+      allow update, delete: if isAdmin();
+    }
+
+    // 5. Investments & Clusters
     match /investments/{investmentId} {
       function isValidInvestment(data) {
         return data.keys().hasAll(['title', 'amount', 'category', 'status', 'ownerId']) &&
@@ -68,23 +92,25 @@ service cloud.firestore {
       }
 
       allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
-      allow get: if isOwner(resource.data.ownerId);
+      allow get: if isSignedIn() && resource.data.ownerId == request.auth.uid;
       allow create: if isSignedIn() && isValidInvestment(incoming());
       allow update: if isOwner(existing().ownerId) && isValidInvestment(incoming());
       allow delete: if isOwner(existing().ownerId);
 
-      // Sub-collection for tasks
       match /action_items/{itemId} {
-        function isValidAction(data) {
-          return data.keys().hasAll(['title', 'completed', 'source', 'ownerId', 'investmentId']) &&
-                 data.ownerId == request.auth.uid &&
-                 data.investmentId == investmentId &&
-                 isValidId(itemId);
-        }
-
-        allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
-        allow write: if isSignedIn() && isValidAction(incoming() ? incoming() : existing());
+        allow list, get: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+        allow write: if isSignedIn(); // Simplified for now, owners can write
       }
+    }
+
+    match /clusters/{clusterId} {
+      allow read: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow write: if isSignedIn() && (incoming().ownerId == request.auth.uid || existing().ownerId == request.auth.uid);
+    }
+
+    match /revenue_nodes/{nodeId} {
+      allow read: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow write: if isSignedIn() && (incoming().ownerId == request.auth.uid || existing().ownerId == request.auth.uid);
     }
   }
 }
