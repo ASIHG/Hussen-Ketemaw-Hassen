@@ -1,0 +1,83 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Core user authentication and role data.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["CEO", "Admin", "User"] },
+        "plan": { "type": "string", "enum": ["free", "pro", "enterprise"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Metric": {
+      "title": "SaaS Metric",
+      "description": "Live revenue and user growth metrics.",
+      "type": "object",
+      "properties": {
+        "revenue": { "type": "string" },
+        "users": { "type": "string" },
+        "growth": { "type": "string" },
+        "conversion": { "type": "number" },
+        "churn": { "type": "number" },
+        "roas": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Investment": {
+      "title": "Investment Asset",
+      "description": "Financial asset tracking data.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["ACTIVE", "PENDING", "COMPLETED"] },
+        "roi": { "type": "number" },
+        "growthRate": { "type": "number" },
+        "riskScore": { "type": "number" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ActionItem": {
+      "title": "Strategic Task",
+      "description": "Specific task associated with an investment asset.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "completed": { "type": "boolean" },
+        "source": { "type": "string", "enum": ["MANUAL", "AI_CEO", "SYSTEM"] },
+        "investmentId": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents."
+    },
+    "/investments/{investmentId}": {
+      "schema": "Investment",
+      "description": "Investment tracking documents."
+    },
+    "/investments/{investmentId}/action_items/{itemId}": {
+      "schema": "ActionItem",
+      "description": "Sub-tasks for specific investments."
+    },
+    "/metrics/global": {
+      "schema": "Metric",
+      "description": "Global SaaS platform metrics."
+    },
+    "/actions/{actionId}": {
+      "schema": "Action",
+      "description": "Log of autonomous AI actions."
+    }
+  }
+}

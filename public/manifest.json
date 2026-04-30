@@ -1,0 +1,18 @@
+{
+  "name": "AFRO SPACE AI MULTI-CLUSTER PLATFORM",
+  "short_name": "AfroSpace",
+  "description": "Global Enterprise Strategy & AI Command Center for Multi-Cluster Business Operations",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020202",
+  "theme_color": "#C5A059",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

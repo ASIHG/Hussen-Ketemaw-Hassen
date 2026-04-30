@@ -1,0 +1,90 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Entities ---
+
+    // 1. User Rules
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.keys().hasAll(['uid', 'email', 'role']) &&
+               data.uid == request.auth.uid &&
+               data.email is string &&
+               data.role in ['CEO', 'MANAGER', 'STAFF'] &&
+               (data.get('plan', 'free') in ['free', 'pro', 'growth', 'enterprise']);
+      }
+
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidUser(incoming()) && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'plan', 'hasCompletedOnboarding', 'selectedClusters']);
+    }
+
+    // 2. Metrics Rules (Read-only for users, System-updated usually)
+    match /metrics/global {
+      allow read: if isSignedIn();
+      // Write protected - assuming system/admin only
+      allow write: if false;
+    }
+
+    // 3. AI Actions
+    match /actions/{actionId} {
+      allow read: if isSignedIn();
+      allow write: if false; // System only
+    }
+
+    // 4. Investments
+    match /investments/{investmentId} {
+      function isValidInvestment(data) {
+        return data.keys().hasAll(['title', 'amount', 'category', 'status', 'ownerId']) &&
+               data.ownerId == request.auth.uid &&
+               data.amount is number &&
+               isValidId(investmentId);
+      }
+
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow get: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && isValidInvestment(incoming());
+      allow update: if isOwner(existing().ownerId) && isValidInvestment(incoming());
+      allow delete: if isOwner(existing().ownerId);
+
+      // Sub-collection for tasks
+      match /action_items/{itemId} {
+        function isValidAction(data) {
+          return data.keys().hasAll(['title', 'completed', 'source', 'ownerId', 'investmentId']) &&
+                 data.ownerId == request.auth.uid &&
+                 data.investmentId == investmentId &&
+                 isValidId(itemId);
+        }
+
+        allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+        allow write: if isSignedIn() && isValidAction(incoming() ? incoming() : existing());
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "NEURALIS",
+  "description": "The world's first Neural All-In-One Super-App. A global social-strategic orchestrator bridging human capital, high-fidelity investments, and autonomous AI discovery.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
