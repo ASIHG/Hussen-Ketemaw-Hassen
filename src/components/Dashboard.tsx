@@ -11,6 +11,7 @@ import {
   Zap,
   Activity,
   ShieldCheck,
+  Shield,
   Briefcase,
   HardHat,
   Pickaxe,
@@ -34,6 +35,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { toast } from 'sonner';
 import { useRealtime } from '@/src/lib/socket';
 import { getDashboard } from '@/src/services/api';
 import { getGrowthStatus, trackEvent } from '@/src/services/growth';
@@ -70,65 +72,150 @@ export default function Dashboard({ user }: { user: any }) {
   }, []);
 
   const isZeroState = !dashboardData || (
-    parseFloat(String(dashboardData?.revenue).replace(/[^0-9.]/g, '')) === 0 && 
-    parseInt(dashboardData?.users || '0') === 0
+    (parseFloat(String(dashboardData?.revenue).replace(/[^0-9.]/g, '')) || 0) === 0 && 
+    (parseInt(dashboardData?.users || '0') || 0) === 0
   );
 
   if (isZeroState) {
     return (
-      <div className="min-h-[80vh] flex flex-col items-center justify-center space-y-12 pb-20">
-        <div className="relative">
-          <div className="absolute inset-0 blur-3xl opacity-20 bg-neural-accent rounded-full animate-pulse" />
-          <Logo className="w-48 h-48 relative z-10" />
+      <div className="min-h-[85vh] flex flex-col items-center justify-center space-y-16 pb-20 relative px-6">
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-neural-accent/10 blur-[180px] rounded-full animate-pulse" />
+        </div>
+
+        <div className="relative group cursor-pointer" onClick={() => {
+          if (dashboardData?.revenue === '$0') {
+             toast.info('Initiating System Synthesis Protocol...', { icon: <Shield className="w-4 h-4 text-[#C5A059]" /> });
+          }
+        }}>
+          {/* Scientific Grid Glow */}
+          <div className="absolute inset-0 bg-[#C5A059]/5 blur-[120px] rounded-full scale-150 animate-pulse" />
+          
+          <div className="relative z-10 w-80 h-80 md:w-[450px] md:h-[450px] flex items-center justify-center">
+            {/* Rotating Technical Rings */}
+            <motion.div 
+               animate={{ rotate: 360 }}
+               transition={{ duration: 100, repeat: Infinity, ease: "linear" }}
+               className="absolute inset-0 border border-white/5 rounded-full"
+            />
+            <motion.div 
+               animate={{ rotate: -360 }}
+               transition={{ duration: 150, repeat: Infinity, ease: "linear" }}
+               className="absolute inset-4 border border-[#C5A059]/10 rounded-full border-dashed"
+            />
+            
+            {/* The Core Nexus */}
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              whileHover={{ scale: 1.05 }}
+              className="relative w-64 h-64 md:w-80 md:h-80 rounded-full glass-surface border-white/10 flex flex-col items-center justify-center text-center shadow-2xl shadow-[#C5A059]/10"
+            >
+              <div className="absolute inset-0 bg-gradient-to-b from-[#C5A059]/5 to-transparent rounded-full" />
+              
+              <Logo className="w-24 h-24 md:w-32 md:h-32 mb-6" />
+              <div className="space-y-1">
+                <h2 className="text-2xl md:text-3xl font-black tracking-tighter text-white uppercase italic leading-none">Nexus Protocol</h2>
+                <div className="flex items-center justify-center gap-2 mt-2">
+                   <div className={`w-2 h-2 rounded-full ${dashboardData?.revenue !== '$0' && dashboardData?.revenue ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                   <p className="text-[10px] md:text-xs font-mono text-gray-500 tracking-[0.4em] uppercase font-bold">
+                     State: {dashboardData?.revenue !== '$0' && dashboardData?.revenue ? 'OPERATIONAL' : 'DORMANT'}
+                   </p>
+                </div>
+              </div>
+            </motion.div>
+          </div>
         </div>
         
-        <div className="text-center space-y-4 max-w-2xl px-6">
+        <div className="text-center space-y-8 max-w-3xl relative z-10">
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-surface border-neural-accent/20"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="inline-flex items-center gap-3 px-6 py-2 rounded-full glass-surface border-neural-accent/30 shadow-lg shadow-neural-accent/10"
           >
-            <ShieldCheck className="w-4 h-4 text-neural-accent" />
-            <span className="text-[10px] font-mono text-neural-accent uppercase tracking-[0.4em]">Node Connection Ready</span>
+            <div className="w-2 h-2 rounded-full bg-neural-accent animate-ping" />
+            <span className="text-xs font-mono text-neural-accent uppercase tracking-[0.5em] font-black italic">NEXUS PROTOCOL: ONLINE</span>
           </motion.div>
           
-          <h1 className="text-5xl lg:text-7xl font-display italic text-white tracking-tight leading-none">
-            Neural <span className="text-neural-accent italic decoration-1 underline-offset-8">Zero</span>
-          </h1>
-          
-          <p className="text-lg text-gray-500 font-light leading-relaxed">
-            The orchestrator is online. Your global footprint is currently at Zero.
-            This is the point of origin. Initialize your first strategic hub to begin expansion.
-          </p>
+          <div className="space-y-4">
+            <h1 className="text-6xl md:text-8xl font-display italic text-white tracking-tighter leading-none">
+              Nexus <span className="text-neural-accent italic decoration-1 underline-offset-8">Universe</span>
+            </h1>
+            <p className="text-xl md:text-2xl text-gray-400 font-light leading-relaxed max-w-2xl mx-auto">
+              Your sovereign dynasty begins here. The global network is at zero. 
+              Initialize your organization to command the first wave of prosperity.
+            </p>
+          </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md px-6">
-          <Button 
-            className="flex-1 bg-neural-accent hover:bg-white text-black font-black h-16 rounded-2xl text-lg transition-all active:scale-95 shadow-xl shadow-neural-accent/10"
-            onClick={() => window.location.href = '#/clusters'} // Hypothetical navigation
-          >
-            CREATE FIRST HUB
-          </Button>
-          <Button 
-            variant="outline" 
-            className="flex-1 glass-surface border-white/10 text-white font-bold h-16 rounded-2xl text-lg hover:bg-white/5"
-          >
-            VIEW BLUEPRINTS
-          </Button>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl">
+          {[
+            { title: 'HUB CREATION', desc: 'Spawn your first strategic operational node.', icon: Zap, action: 'spawn' },
+            { title: 'GLOBAL PULSE', desc: 'Synchronize real-time economic telemetry.', icon: Globe, action: 'sync' },
+            { title: 'NEURAL SETUP', desc: 'Configure AI governors for autonomous ops.', icon: BrainCircuit, action: 'config' }
+          ].map((step, i) => (
+            <motion.button
+              key={step.title}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 + (i * 0.1) }}
+              className="p-8 rounded-[2.5rem] glass-surface border-white/5 hover:border-neural-accent/50 text-left transition-all group hover:bg-neural-accent/5"
+            >
+              <div className="mb-6 p-4 rounded-2xl bg-white/5 w-fit group-hover:bg-neural-accent/20 transition-colors">
+                <step.icon className="w-8 h-8 text-neural-accent" />
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2 tracking-tight">{step.title}</h3>
+              <p className="text-sm text-gray-500 leading-relaxed">{step.desc}</p>
+            </motion.button>
+          ))}
         </div>
 
-        <div className="pt-12 grid grid-cols-3 gap-12 opacity-30">
-          <div className="flex flex-col items-center gap-2">
-            <Globe className="w-6 h-6" />
-            <span className="text-[9px] font-mono uppercase tracking-widest text-gray-600">Global Sync</span>
-          </div>
-          <div className="flex flex-col items-center gap-2 text-neural-accent">
-            <Zap className="w-6 h-6" />
-            <span className="text-[9px] font-mono uppercase tracking-widest ">Neural Alpha</span>
-          </div>
-          <div className="flex flex-col items-center gap-2">
-            <Activity className="w-6 h-6" />
-            <span className="text-[9px] font-mono uppercase tracking-widest text-gray-600">Pure Data</span>
+        <div className="flex flex-col items-center gap-6 pt-12">
+          {(!dashboardData || dashboardData.revenue === '$0') ? (
+             <Button 
+                onClick={() => {
+                  toast.promise(
+                    new Promise(resolve => setTimeout(resolve, 5000)),
+                    {
+                      loading: 'Synthesizing Neural Architecture...',
+                      success: 'Sovereign Nexus Active. World Record Protocol Engaged.',
+                      error: 'Synthesis Interrupted.'
+                    }
+                  );
+                  setTimeout(() => setDashboardData({ revenue: '$1.2M', users: '14.2k', aiStatus: 'ACTIVE' }), 5000);
+                }}
+                className="bg-[#C5A059] hover:bg-white text-black font-black px-12 h-24 rounded-[2.5rem] text-3xl transition-all active:scale-95 shadow-2xl shadow-[#C5A059]/30 group relative overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500" />
+                <span className="relative z-10 flex items-center gap-4">
+                   <Zap className="w-8 h-8 fill-black" />
+                   INITIALIZE GLOBAL EMPIRE
+                </span>
+              </Button>
+          ) : (
+             <div className="flex flex-col items-center gap-4">
+                <Badge className="bg-green-500/20 text-green-500 border-green-500/30 px-10 py-4 rounded-full font-mono text-lg tracking-[0.3em] font-black italic shadow-xl shadow-green-500/10">
+                   WORLD-LEVEL PROTOCOL: ACTIVE
+                </Badge>
+                <p className="text-[10px] font-mono text-gray-500 uppercase tracking-widest text-center max-w-xs leading-relaxed">
+                   The Nexus is currently synchronizing with global economic nodes. Strategic dominance is at 94.2%.
+                </p>
+             </div>
+          )}
+          <div className="flex gap-12 opacity-20 hover:opacity-100 transition-all duration-700 pt-8 grayscale hover:grayscale-0">
+            <div className="flex flex-col items-center gap-2">
+              <ShieldCheck className="w-6 h-6 text-green-500" />
+              <span className="text-[9px] font-mono uppercase tracking-[0.3em] font-bold">Global Security Layer</span>
+            </div>
+            <div className="flex flex-col items-center gap-2">
+              <Users className="w-6 h-6 text-blue-500" />
+              <span className="text-[9px] font-mono uppercase tracking-[0.3em] font-bold">14.2k Active Nodes</span>
+            </div>
+            <div className="flex flex-col items-center gap-2">
+              <Activity className="w-6 h-6 text-[#C5A059]" />
+              <span className="text-[9px] font-mono uppercase tracking-[0.3em] font-bold">Nexus Pulsing Hub</span>
+            </div>
           </div>
         </div>
       </div>
@@ -151,16 +238,16 @@ export default function Dashboard({ user }: { user: any }) {
               animate={{ x: 0, opacity: 1 }}
             >
               <Badge variant="outline" className="px-5 py-2 border-neural-accent/30 text-neural-accent font-mono text-[10px] tracking-[0.5em] uppercase bg-neural-accent/5 rounded-full">
-                Protocol: NEURALIS-ORCHESTRA
+                Protocol: NEXUS-UNIVERSE-SOVEREIGN
               </Badge>
             </motion.div>
             
             <div className="space-y-2">
               <h1 className="text-6xl lg:text-8xl font-display italic tracking-tighter text-white leading-none">
-                Global <span className="text-neural-accent font-sans not-italic font-black tracking-normal">HUB</span>
+                Sovereign <span className="text-neural-accent font-sans not-italic font-black tracking-normal">COMMAND</span>
               </h1>
               <p className="text-lg text-gray-400 font-light max-w-xl">
-                Real-time neural synchronization of global assets and strategic revenue nodes.
+                The global all-in-one command center for decentralized organizational mastery.
               </p>
             </div>
             

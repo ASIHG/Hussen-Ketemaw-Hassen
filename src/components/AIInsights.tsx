@@ -66,7 +66,17 @@ interface Session {
   timestamp: Date;
   tags?: string[];
   summary?: string;
+  role?: string;
 }
+
+const AGENT_ROLES = [
+  'General Intelligence',
+  'CEO (Strategic Focus)',
+  'CFO (Financial Metrics)',
+  'CTO (Technical Architecture)',
+  'COO (Operational Velocity)',
+  'CSO (Market Strategy)'
+];
 
 const SUGGESTIONS = [
   { label: 'Analyze Sector Risk', icon: ShieldAlert },
@@ -84,10 +94,13 @@ export default function AIInsights({ user }: { user: any }) {
   const [sortField, setSortField] = useState<'title' | 'date' | 'tags'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [filterTag, setFilterTag] = useState<string | null>(null);
+  const [filterRole, setFilterRole] = useState<string | null>(null);
   const [sessionTags, setSessionTags] = useState<string[]>([]);
+  const [sessionRole, setSessionRole] = useState<string>('General Intelligence');
   const [tagInput, setTagInput] = useState('');
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<Socket | null>(null);
@@ -228,6 +241,7 @@ export default function AIInsights({ user }: { user: any }) {
           title: meta.title,
           tags: meta.tags || [],
           summary: meta.summary || '',
+          role: meta.role || 'General Intelligence',
           timestamp: meta.timestamp?.toDate ? meta.timestamp.toDate() : new Date()
         });
       });
@@ -253,11 +267,14 @@ export default function AIInsights({ user }: { user: any }) {
       if (activeSessionId) {
         setCurrentSessionId(activeSessionId);
         setMessages(allMessages.filter(m => m.sessionId === activeSessionId));
-        setSessionTags(sessionMap.get(activeSessionId)?.tags || []);
+        const activeSession = sessionMap.get(activeSessionId);
+        setSessionTags(activeSession?.tags || []);
+        setSessionRole(activeSession?.role || 'General Intelligence');
       } else if (allMessages.length === 0) {
         const newSid = crypto.randomUUID();
         setCurrentSessionId(newSid);
         setSessionTags([]);
+        setSessionRole('General Intelligence');
         setMessages([{ 
           role: 'ai', 
           content: `Hello ${user.displayName?.split(' ')[0]}. I am the Afro Space Strategic Intelligence Engine. Standing by for instructions.`,
@@ -293,6 +310,7 @@ export default function AIInsights({ user }: { user: any }) {
     const newSid = crypto.randomUUID();
     setCurrentSessionId(newSid);
     setSessionTags([]);
+    setSessionRole('General Intelligence');
     setMessages([
       { 
         role: 'ai', 
@@ -352,6 +370,7 @@ export default function AIInsights({ user }: { user: any }) {
     const session = sessions.find(s => s.id === sid);
     if (session?.summary) return;
 
+    setIsGeneratingSummary(true);
     try {
       const chatContext = chatMessages
         .map(m => `${m.role.toUpperCase()}: ${m.content}`)
@@ -365,8 +384,32 @@ export default function AIInsights({ user }: { user: any }) {
       }, { merge: true });
 
       setSessions(prev => prev.map(s => s.id === sid ? { ...s, summary } : s));
-    } catch (error) {
+      toast.success('Strategic summary synthesized');
+    } catch (error: any) {
       console.error('Summary generation failed:', error);
+      let errMsg = 'Neural summary synthesis failed.';
+      if (error.message === 'NEURAL_QUOTA_EXCEEDED') {
+        errMsg = 'Neural capacity reached. Summary core cooling required.';
+      }
+      toast.error(errMsg);
+    } finally {
+      setIsGeneratingSummary(false);
+    }
+  };
+
+  const handleUpdateRole = async (newRole: string) => {
+    if (!currentSessionId) return;
+    setSessionRole(newRole);
+
+    try {
+      await setDoc(doc(db, 'chat_sessions', currentSessionId), {
+        role: newRole
+      }, { merge: true });
+      
+      setSessions(prev => prev.map(s => s.id === currentSessionId ? { ...s, role: newRole } : s));
+      toast.success(`Agent Persona synchronized: ${newRole}`);
+    } catch (error) {
+      toast.error('Failed to sync agent persona');
     }
   };
 
@@ -404,6 +447,7 @@ export default function AIInsights({ user }: { user: any }) {
       userMsg.id = userMsgRef.id;
 
       const response = await getAIInsight(text);
+      if (!response) throw new Error('EMPTY_NEURAL_DATA');
       
       // Mocking structured analysis data for higher fidelity
       const mockAnalysis: AnalysisData = {
@@ -441,6 +485,7 @@ export default function AIInsights({ user }: { user: any }) {
       await setDoc(doc(db, 'chat_sessions', sid), {
         userId: user.uid,
         title: userMsg.content.substring(0, 30) + (userMsg.content.length > 30 ? '...' : ''),
+        role: sessionRole || 'General Intelligence',
         timestamp: serverTimestamp()
       }, { merge: true });
 
@@ -451,6 +496,7 @@ export default function AIInsights({ user }: { user: any }) {
           title: text.substring(0, 30) + (text.length > 30 ? '...' : ''),
           timestamp: new Date(),
           tags: [],
+          role: sessionRole || 'General Intelligence',
           summary: ''
         }, ...prev]);
       }
@@ -459,8 +505,32 @@ export default function AIInsights({ user }: { user: any }) {
       if (updatedMessages.length >= 4 && updatedMessages.length % 2 === 0) {
         generateSessionSummary(sid, updatedMessages);
       }
-    } catch (error) {
-      toast.error('Intelligence downlink failed');
+    } catch (error: any) {
+      console.error('Intelligence downlink error:', error);
+      let errorMsg = 'Intelligence downlink failed. Neural core may be overloaded.';
+      
+      if (error.message === 'NEURAL_QUOTA_EXCEEDED') {
+        errorMsg = 'Neural request quota exceeded. Please wait for core recharge.';
+      } else if (error.message === 'EMPTY_NEURAL_DATA') {
+        errorMsg = 'Orchestrator returned zero-bit data. Semantic re-alignment required.';
+      } else if (!window.navigator.onLine) {
+        errorMsg = 'Network connectivity severed. Strategic link lost.';
+      }
+
+      toast.error(errorMsg, {
+        action: {
+          label: 'Retry',
+          onClick: () => handleSend(text)
+        }
+      });
+      
+      // Fallback: system message in chat
+      setMessages(prev => [...prev, {
+        role: 'ai',
+        content: `ALERT: ${errorMsg} Protocol: RETRY_FALLBACK_MODE.`,
+        timestamp: new Date(),
+        sessionId: sid
+      }]);
     } finally {
       setIsTyping(false);
     }
@@ -657,6 +727,32 @@ export default function AIInsights({ user }: { user: any }) {
               </div>
               
               <div className="flex items-center gap-2">
+                <select 
+                  value={sessionRole}
+                  onChange={(e) => handleUpdateRole(e.target.value)}
+                  className="h-7 px-2 text-[10px] font-mono border border-[#C5A059]/30 bg-black text-[#C5A059] rounded-md outline-none focus:ring-1 focus:ring-[#C5A059]/50 transition-all uppercase"
+                >
+                  {AGENT_ROLES.map(role => (
+                    <option key={role} value={role}>{role}</option>
+                  ))}
+                </select>
+
+                {!sessions.find(s => s.id === currentSessionId)?.summary && messages.length >= 2 && (
+                   <Button
+                     variant="outline"
+                     size="sm"
+                     onClick={() => currentSessionId && generateSessionSummary(currentSessionId, messages)}
+                     disabled={isGeneratingSummary}
+                     className="h-7 px-2 text-[10px] font-mono border-[#C5A059]/30 text-[#C5A059] hover:bg-[#C5A059]/10 gap-1.5"
+                   >
+                     {isGeneratingSummary ? (
+                       <RefreshCcw className="w-3 h-3 animate-spin" />
+                     ) : (
+                       <Sparkles className="w-3 h-3" />
+                     )}
+                     COMPUTE STRATEGIC SUMMARY
+                   </Button>
+                )}
                 <AnimatePresence>
                   {sessionTags.map(tag => (
                     <motion.div
@@ -899,22 +995,40 @@ export default function AIInsights({ user }: { user: any }) {
                       )}
                     </button>
                   </div>
+
+                  {/* Role Filter */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[8px] font-mono text-gray-600 uppercase tracking-widest px-1">Filter by Persona</span>
+                    <select 
+                      value={filterRole || ''}
+                      onChange={(e) => setFilterRole(e.target.value || null)}
+                      className="w-full bg-black/40 border border-white/5 text-[9px] font-mono text-[#C5A059] p-1.5 rounded-md cursor-pointer uppercase outline-none focus:border-[#C5A059]/30"
+                    >
+                      <option value="">All Personas</option>
+                      {AGENT_ROLES.map(role => (
+                        <option key={role} value={role}>{role}</option>
+                      ))}
+                    </select>
+                  </div>
                   
                   {/* Tag Quick Filters */}
-                  <div className="flex flex-wrap gap-1">
-                    {Array.from(new Set(sessions.flatMap(s => s.tags || []))).slice(0, 5).map(tag => (
-                      <button
-                        key={tag}
-                        onClick={() => setFilterTag(filterTag === tag ? null : tag)}
-                        className={`text-[9px] px-2 py-0.5 rounded-full border transition-all ${
-                          filterTag === tag 
-                          ? 'bg-[#C5A059] text-black border-[#C5A059]' 
-                          : 'bg-white/5 text-gray-500 border-white/5 hover:border-white/20'
-                        }`}
-                      >
-                        {tag}
-                      </button>
-                    ))}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[8px] font-mono text-gray-600 uppercase tracking-widest px-1">Neural Tags</span>
+                    <div className="flex flex-wrap gap-1">
+                      {Array.from(new Set(sessions.flatMap(s => s.tags || []))).slice(0, 8).map(tag => (
+                        <button
+                          key={tag}
+                          onClick={() => setFilterTag(filterTag === tag ? null : tag)}
+                          className={`text-[9px] px-2 py-0.5 rounded-full border transition-all ${
+                            filterTag === tag 
+                            ? 'bg-[#C5A059] text-black border-[#C5A059]' 
+                            : 'bg-white/5 text-gray-500 border-white/5 hover:border-white/20'
+                          }`}
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -924,7 +1038,8 @@ export default function AIInsights({ user }: { user: any }) {
                       const matchesSearch = s.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                                           s.tags?.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
                       const matchesTag = !filterTag || s.tags?.includes(filterTag);
-                      return matchesSearch && matchesTag;
+                      const matchesRole = !filterRole || s.role === filterRole;
+                      return matchesSearch && matchesTag && matchesRole;
                     })
                     .sort((a, b) => {
                       let comparison = 0;
@@ -960,9 +1075,14 @@ export default function AIInsights({ user }: { user: any }) {
                             <p className="text-[8px] font-mono opacity-40 uppercase tracking-tighter">
                               {session.timestamp.toLocaleDateString()}
                             </p>
-                            <div className="flex gap-1">
+                            <div className="flex items-center gap-1.5 overflow-hidden">
+                              {session.role && session.role !== 'General Intelligence' && (
+                                <span className="text-[7px] bg-[#C5A059]/20 text-[#C5A059] px-1 rounded uppercase font-bold shrink-0">
+                                  {session.role.split(' ')[0]}
+                                </span>
+                              )}
                               {session.tags?.map(t => (
-                                <span key={t} className="text-[7px] text-[#C5A059]/60 px-1 border border-[#C5A059]/20 rounded lowercase">{t}</span>
+                                <span key={t} className="text-[7px] text-[#C5A059]/60 px-1 border border-[#C5A059]/20 rounded lowercase shrink-0">{t}</span>
                               ))}
                             </div>
                           </div>
@@ -982,10 +1102,15 @@ export default function AIInsights({ user }: { user: any }) {
                                  e.stopPropagation();
                                  generateSessionSummary(session.id, messages);
                                }}
-                               className="p-1 rounded bg-black/40 text-gray-500 hover:text-[#C5A059] transition-colors"
+                               disabled={isGeneratingSummary}
+                               className="p-1 rounded bg-black/40 text-gray-500 hover:text-[#C5A059] transition-colors disabled:opacity-30"
                                title="Generate Strategy Summary"
                              >
-                                <Sparkles className="w-3 h-3" />
+                                {isGeneratingSummary ? (
+                                  <RefreshCcw className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <Sparkles className="w-3 h-3" />
+                                )}
                              </button>
                           </div>
                         )}

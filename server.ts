@@ -41,6 +41,30 @@ async function startServer() {
     });
   });
 
+  // Billing Tiers API
+  app.get("/api/billing/tiers", (req, res) => {
+    res.json([
+      {
+        id: 'starter',
+        name: 'Starter Architecture',
+        price: 49,
+        features: ['Basic Neural Nodes', 'Standard Analytics', 'Single Cluster Access', '5 AI Predictions/mo']
+      },
+      {
+        id: 'pro',
+        name: 'Professional Orchestrator',
+        price: 199,
+        features: ['Advanced Neural Mesh', 'Predictive Yield Analysis', 'Full Cluster Management', 'Autonomous AI Strategy']
+      },
+      {
+        id: 'enterprise',
+        name: 'Global Nexus',
+        price: 999,
+        features: ['Vast Global Network', 'Custom AI Models', 'Unlimited Cluster Scaling', '24/7 Strategic Support']
+      }
+    ]);
+  });
+
   // In-memory "DB" for demo / Fallback
   const events: any[] = [];
   const actions: any[] = [];

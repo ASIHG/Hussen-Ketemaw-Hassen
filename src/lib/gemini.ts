@@ -27,9 +27,13 @@ export const getAgentInsight = async (role: AgentRole, context: string) => {
       },
     });
     return response.text;
-  } catch (error) {
+  } catch (error: any) {
     console.error(`AI ${role} Insight Error:`, error);
-    return "Intelligence systems recalibrating. Insights temporarily unavailable.";
+    // Rethrow specialized error for component consumption
+    if (error.message?.includes('quota')) {
+      throw new Error('NEURAL_QUOTA_EXCEEDED');
+    }
+    throw error;
   }
 };
 
@@ -43,8 +47,11 @@ export const getAIInsight = async (prompt: string) => {
       },
     });
     return response.text;
-  } catch (error) {
+  } catch (error: any) {
     console.error("AI Insight Error:", error);
-    return "Unable to generate insights at this time.";
+    if (error.message?.includes('quota')) {
+      throw new Error('NEURAL_QUOTA_EXCEEDED');
+    }
+    throw error;
   }
 };

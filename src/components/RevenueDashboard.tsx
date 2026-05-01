@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   CreditCard, 
   TrendingUp, 
@@ -10,7 +10,8 @@ import {
   Zap,
   Check,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  Brain
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,254 @@ import {
   Legend
 } from 'recharts';
 import { toast } from 'sonner';
+import { Sparkles, RefreshCw } from 'lucide-react';
+
+const TierVisual = ({ tierId, tierName }: { tierId: string; tierName: string }) => {
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [seed, setSeed] = useState(Math.random());
+
+  const handleRegenerate = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsGenerating(true);
+    setTimeout(() => {
+      setSeed(Math.random());
+      setIsGenerating(false);
+      toast.success(`AI visual synthesized for ${tierName}`);
+    }, 1500);
+  };
+
+  const getTierConfig = () => {
+    switch (tierId) {
+      case 'starter':
+        return {
+          gradient: 'from-blue-600/10 to-[#C5A059]/5',
+          lines: 'stroke-blue-400/20',
+          accent: 'text-blue-400',
+          icon: <Activity className="w-6 h-6" />,
+          label: 'Starter Architecture'
+        };
+      case 'pro':
+        return {
+          gradient: 'from-[#C5A059]/20 to-purple-500/10',
+          lines: 'stroke-[#C5A059]/30',
+          accent: 'text-[#C5A059]',
+          icon: <Brain className="w-8 h-8" />,
+          label: 'Pro Orchestr8or'
+        };
+      case 'enterprise':
+        return {
+          gradient: 'from-purple-600/20 via-[#C5A059]/20 to-blue-600/20',
+          lines: 'stroke-white/20',
+          accent: 'text-white',
+          icon: <Zap className="w-10 h-10" />,
+          label: 'Enterprise Nexus'
+        };
+      default:
+        return {
+          gradient: 'from-gray-500/10 to-transparent',
+          lines: 'stroke-gray-500/10',
+          accent: 'text-gray-500',
+          icon: <Check className="w-5 h-5" />,
+          label: 'Baseline'
+        };
+    }
+  };
+
+  const config = getTierConfig();
+
+  return (
+    <div className="relative w-full h-48 mb-6 rounded-2xl overflow-hidden border border-white/5 bg-[#050505] group transition-all hover:border-[#C5A059]/30">
+      <div className={`absolute inset-0 bg-gradient-to-br transition-all duration-1000 ${config.gradient}`} />
+      
+      {/* Grid Pattern Background */}
+      <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px]" />
+
+      {/* Dynamic SVG Visuals */}
+      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 200 120" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+            <feMerge>
+              <feMergeNode in="coloredBlur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+        </defs>
+        
+        {tierId === 'starter' && (
+          <g className={config.lines}>
+            {/* Architectural Blueprint Visual */}
+            {[...Array(20)].map((_, i) => (
+              <line key={`v-${i}`} x1={i * 10} y1="0" x2={i * 10} y2="120" strokeWidth="0.05" opacity="0.15" />
+            ))}
+            {[...Array(12)].map((_, i) => (
+              <line key={`h-${i}`} x1="0" y1={i * 10} x2="200" y2={i * 10} strokeWidth="0.05" opacity="0.15" />
+            ))}
+            {/* Structural Drawing Lines */}
+            <motion.path 
+              d="M20,20 L180,20 L180,100 L20,100 Z" 
+              strokeWidth="0.5" fill="none" opacity="0.3"
+              initial={{ pathLength: 0 }}
+              animate={{ pathLength: 1 }}
+              transition={{ duration: 4, repeat: Infinity }}
+            />
+            <motion.path 
+              d="M20,20 L180,100 M180,20 L20,100" 
+              strokeWidth="0.2" opacity="0.1" 
+            />
+            <motion.rect 
+              x="80" y="40" width="40" height="40" 
+              strokeWidth="1" fill="none"
+              animate={{ scale: [1, 1.05, 1] }}
+              transition={{ duration: 3, repeat: Infinity }}
+            />
+            {/* Dimensions */}
+            <g className="text-[4px] font-mono fill-current opacity-30">
+               <text x="100" y="15" textAnchor="middle">CORE_PLAN_SCALE_1:100</text>
+               <text x="185" y="60" className="rotate-90 origin-center">Z_AXIS_NODE</text>
+            </g>
+          </g>
+        )}
+
+        {tierId === 'pro' && (
+          <g className={config.lines}>
+            {/* Advanced Neural Orchestration Visual */}
+            {[...Array(18)].map((_, i) => {
+              const x = 100 + 60 * Math.cos(i * Math.PI / 9);
+              const y = 60 + 40 * Math.sin(i * Math.PI / 9);
+              return (
+                <g key={i}>
+                  <motion.circle 
+                    cx={x} cy={y} r="1.5" 
+                    fill="currentColor"
+                    animate={{ opacity: [0.2, 1, 0.2] }}
+                    transition={{ duration: 2 + Math.random(), repeat: Infinity }}
+                  />
+                  {[...Array(2)].map((_, j) => {
+                    const nextX = 100 + 60 * Math.cos((i + j + 3) * Math.PI / 9);
+                    const nextY = 60 + 40 * Math.sin((i + j + 3) * Math.PI / 9);
+                    return (
+                      <motion.line 
+                        key={j} x1={x} y1={y} x2={nextX} y2={nextY} 
+                        strokeWidth="0.15" opacity="0.1"
+                        animate={{ opacity: [0.05, 0.2, 0.05] }}
+                        transition={{ duration: 3, repeat: Infinity }}
+                      />
+                    );
+                  })}
+                </g>
+              );
+            })}
+            <motion.circle 
+              cx="100" cy="60" r="25" 
+              strokeWidth="0.5" fill="none" strokeDasharray="1 4"
+              animate={{ rotate: 360 }}
+              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+            />
+            {/* Center Core */}
+            <motion.g animate={{ scale: [1, 1.1, 1] }} transition={{ duration: 2, repeat: Infinity }}>
+              <circle cx="100" cy="60" r="8" strokeWidth="2" fill="none" opacity="0.3" filter="url(#glow)" />
+              <circle cx="100" cy="60" r="4" fill="currentColor" />
+            </motion.g>
+          </g>
+        )}
+
+        {tierId === 'enterprise' && (
+          <g className={config.lines}>
+            {/* Global Nexus Connectivity Visual */}
+            <motion.circle cx="100" cy="60" r="50" strokeWidth="0.1" fill="none" opacity="0.2" />
+            <motion.path 
+              d="M50,60 Q100,10 150,60 Q100,110 50,60" 
+              strokeWidth="0.2" fill="none" opacity="0.3"
+              animate={{ scale: [1, 1.02, 1] }}
+              transition={{ duration: 5, repeat: Infinity }}
+            />
+            {[...Array(24)].map((_, i) => {
+              const angle = (i * Math.PI * 2) / 24;
+              const x = 100 + 50 * Math.cos(angle);
+              const y = 60 + 50 * Math.sin(angle);
+              return (
+                <line 
+                  key={i} x1="100" y1="60" x2={x} y2={y} 
+                  strokeWidth="0.05" opacity="0.05" 
+                />
+              );
+            })}
+            {/* Satellite Nodes */}
+            {[...Array(8)].map((_, i) => {
+              const angle = (i * Math.PI * 2) / 8 + seed;
+              const x = 100 + 35 * Math.cos(angle);
+              const y = 60 + 35 * Math.sin(angle);
+              return (
+                <motion.circle 
+                  key={i} cx={x} cy={y} r="1" 
+                  fill="white"
+                  animate={{ opacity: [0.2, 1, 0.2] }}
+                  transition={{ duration: 1.5, delay: i * 0.2, repeat: Infinity }}
+                />
+              );
+            })}
+            <motion.path 
+              d="M70,40 C90,30 110,30 130,40 S130,80 130,80" 
+              strokeWidth="0.1" fill="none" opacity="0.1" strokeDasharray="2 2"
+            />
+          </g>
+        )}
+      </svg>
+
+      <div className="absolute inset-0 flex items-center justify-center">
+        <AnimatePresence mode="wait">
+          {isGenerating ? (
+            <motion.div 
+              key="generating"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.1 }}
+              className="flex flex-col items-center gap-2"
+            >
+              <RefreshCw className="w-6 h-6 text-[#C5A059] animate-spin" />
+              <span className="text-[8px] font-mono text-[#C5A059] uppercase tracking-[3px] font-black">Neural Computing...</span>
+            </motion.div>
+          ) : (
+            <motion.div
+              key={seed}
+              initial={{ scale: 0.8, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              className={`flex flex-col items-center gap-1 ${config.accent}`}
+            >
+              <div className="relative">
+                <div className="absolute inset-0 blur-2xl opacity-20 scale-150 bg-current" />
+                {config.icon}
+              </div>
+              <span className="text-[7px] font-mono uppercase tracking-[2px] opacity-50">{config.label}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <button 
+        onClick={handleRegenerate}
+        className="absolute top-3 right-3 p-2 rounded-lg bg-black/60 border border-white/10 opacity-0 group-hover:opacity-100 transition-all hover:bg-[#C5A059] hover:text-black z-20"
+      >
+        <Sparkles className="w-3.5 h-3.5" />
+      </button>
+
+      <div className="absolute bottom-3 left-3 flex items-center gap-2 z-10">
+        <div className="flex gap-0.5">
+          {[...Array(3)].map((_, i) => (
+            <motion.div 
+              key={i}
+              className="w-1 h-3 bg-[#C5A059]/40 rounded-full"
+              animate={{ height: [4, 12, 4] }}
+              transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+            />
+          ))}
+        </div>
+        <span className="text-[8px] font-mono text-white/40 uppercase tracking-tighter">AI Vision Engine Output: {seed.toString().slice(2, 8)}</span>
+      </div>
+    </div>
+  );
+};
 
 const REVENUE_DATA = [
   { month: 'Jan', mrr: 45000, expansion: 2000, churn: 1200 },
@@ -137,6 +386,7 @@ export default function RevenueDashboard() {
               </div>
             )}
             <CardHeader>
+              <TierVisual tierId={tier.id} tierName={tier.name} />
               <CardTitle className="text-2xl font-bold">{tier.name}</CardTitle>
               <CardDescription className="font-mono text-[#C5A059] text-lg">${tier.price}<span className="text-xs text-gray-500 tracking-normal capitalize"> / monthly</span></CardDescription>
             </CardHeader>

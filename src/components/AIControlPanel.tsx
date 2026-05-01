@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTranslation } from '@/src/lib/LanguageContext';
+import { toast } from 'sonner';
 
 interface AgentDecision {
   agent: string;
@@ -76,12 +77,32 @@ export default function AIControlPanel() {
       setLoading(true);
       setError(null);
       const res = await fetch('/api/ai/decisions');
-      if (!res.ok) throw new Error('API_SYNC_FAILED');
+      
+      if (!res.ok) {
+        if (res.status === 401) throw new Error('AUTH_NEURAL_REJECTION');
+        if (res.status === 429) throw new Error('RATE_LIMIT_EXCEEDED');
+        throw new Error('API_SYNC_FAILED');
+      }
+
       const data = await res.json();
       setDecisions(data);
-    } catch (error) {
+      toast.success('Neural sync established');
+    } catch (error: any) {
       console.error('Error fetching AI decisions:', error);
-      setError('Failed to load AI decisions. Neural link unstable. Please try again later.');
+      let userMessage = 'Failed to load AI decisions. Neural link unstable.';
+      
+      if (error.message === 'AUTH_NEURAL_REJECTION') {
+        userMessage = 'Authentication rejected by security gate. Please re-sync.';
+      } else if (error.message === 'RATE_LIMIT_EXCEEDED') {
+        userMessage = 'Neural request frequency too high. Please throttle operations.';
+      } else if (!window.navigator.onLine) {
+        userMessage = 'No network connection detected. Neural matrix offline.';
+      }
+
+      setError(userMessage);
+      toast.error(userMessage, {
+        description: 'System identifier: AI_UPLINK_FAILURE'
+      });
     } finally {
       setLoading(false);
     }

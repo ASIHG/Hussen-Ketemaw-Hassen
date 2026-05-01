@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useScroll, useTransform } from 'motion/react';
 import { 
   Heart, 
   MessageSquare, 
@@ -13,11 +13,22 @@ import {
   Gem,
   Play,
   Pause,
-  Repeat
+  Repeat,
+  Sparkles,
+  Check,
+  X,
+  Network,
+  ChevronUp,
+  ChevronDown,
+  Info
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { getAIInsight } from '../lib/gemini';
+import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
+import { db, auth } from '../lib/firebase';
+import { toast } from 'sonner';
 
 interface NeuralMoment {
   id: string;
@@ -40,6 +51,18 @@ interface NeuralMoment {
   timestamp: string;
   type: 'STRATEGIC' | 'ALPHA' | 'MISSION' | 'RESULT';
   color: string;
+  mediaUrl?: string;
+}
+
+interface OpportunitySuggestion {
+  id: string;
+  title: string;
+  sector: string;
+  description: string;
+  potential: string;
+  risk: string;
+  status: 'PENDING' | 'ACCEPTED' | 'DECLINED';
+  suggestedAt: any;
 }
 
 const DUMMY_MOMENTS: NeuralMoment[] = [
@@ -59,7 +82,8 @@ const DUMMY_MOMENTS: NeuralMoment[] = [
     shares: 231,
     timestamp: '2m ago',
     type: 'RESULT',
-    color: '#D4AF37'
+    color: '#D4AF37',
+    mediaUrl: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1000'
   },
   {
     id: '2',
@@ -77,7 +101,8 @@ const DUMMY_MOMENTS: NeuralMoment[] = [
     shares: 110,
     timestamp: '15m ago',
     type: 'ALPHA',
-    color: '#3b82f6'
+    color: '#3b82f6',
+    mediaUrl: 'https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1000'
   },
   {
     id: '3',
@@ -95,132 +120,324 @@ const DUMMY_MOMENTS: NeuralMoment[] = [
     shares: 540,
     timestamp: '1h ago',
     type: 'MISSION',
-    color: '#C5A059'
+    color: '#C5A059',
+    mediaUrl: 'https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?q=80&w=1000'
   }
 ];
 
 export default function NeuralDiscovery() {
-  const [activeMoment, setActiveMoment] = useState(0);
   const [isLiked, setIsLiked] = useState<Record<string, boolean>>({});
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [suggestions, setSuggestions] = useState<OpportunitySuggestion[]>([]);
+  const [showOpportunities, setShowOpportunities] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const q = query(collection(db, 'suggested_opportunities'), orderBy('suggestedAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as OpportunitySuggestion));
+      setSuggestions(docs);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleLike = (id: string) => {
     setIsLiked(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  return (
-    <div className="h-[calc(100vh-120px)] w-full flex flex-col items-center">
-      <div className="w-full max-w-2xl flex items-center justify-between mb-8 px-4">
-        <div>
-          <h1 className="text-3xl font-display italic text-white tracking-tight">Global Feed</h1>
-          <p className="text-[10px] font-mono text-neural-accent tracking-[0.4em] uppercase opacity-50">Discovery Node // Sync Active</p>
-        </div>
-        <div className="flex gap-2">
-           <Badge variant="outline" className="text-[9px] font-mono border-white/10 uppercase tracking-widest text-neural-accent">Live Updates</Badge>
-           <Badge variant="outline" className="text-[9px] font-mono border-white/10 uppercase tracking-widest">Global</Badge>
-        </div>
-      </div>
+  const handleStrategicDiscovery = async () => {
+    if (isAnalyzing) return;
+    setIsAnalyzing(true);
+    const toastId = toast.loading('Neural engine scanning global economic telemetry...');
 
-      <div className="flex-1 w-full max-w-2xl overflow-y-auto no-scrollbar snap-y snap-mandatory gap-8 flex flex-col pb-20">
-        {DUMMY_MOMENTS.map((moment, idx) => (
-          <motion.div
+    try {
+      const prompt = `Analyze current global economic data, emerging markets, and technological shifts. Suggest 3 high-impact new 'investment clusters' that Afro Space Holding Group should consider. Format exactly with prefixes CLUSTER, SECTOR, DESC, POTENTIAL, RISK and use --- separator.`;
+      const result = await getAIInsight(prompt);
+      const blocks = result.split('---').filter(b => b.trim().includes('CLUSTER:'));
+
+      for (const block of blocks) {
+        const lines = block.trim().split('\n');
+        const getVal = (prefix: string) => {
+          const line = lines.find(l => l.toUpperCase().startsWith(prefix));
+          return line ? line.split(':')[1]?.trim() : 'N/A';
+        };
+        
+        await addDoc(collection(db, 'suggested_opportunities'), {
+          title: getVal('CLUSTER'),
+          sector: getVal('SECTOR'),
+          description: getVal('DESC'),
+          potential: getVal('POTENTIAL'),
+          risk: getVal('RISK'),
+          status: 'PENDING',
+          suggestedAt: serverTimestamp()
+        });
+      }
+
+      toast.success('Strategic opportunities identified.', { id: toastId });
+      setShowOpportunities(true);
+    } catch (error) {
+       toast.error('Strategic scan interrupted.', { id: toastId });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  return (
+    <div className="relative h-screen md:h-[calc(100vh-64px)] w-full overflow-hidden bg-black select-none">
+      {/* Immersive Scroll Container */}
+      <div 
+        ref={containerRef}
+        className="h-full w-full overflow-y-scroll snap-y snap-mandatory no-scrollbar"
+      >
+        {DUMMY_MOMENTS.map((moment) => (
+          <section 
             key={moment.id}
-            initial={{ opacity: 0, y: 50 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            className="snap-start min-h-[600px] w-full relative"
+            className="h-full w-full snap-start relative flex items-center justify-center overflow-hidden"
           >
-            <div className="absolute inset-0 rounded-[3rem] overflow-hidden border border-white/10 shadow-2xl">
-              {/* Background Aesthetic */}
-              <div 
-                className="absolute inset-0 opacity-20"
-                style={{ 
-                  background: `radial-gradient(circle at 50% 50%, ${moment.color} 0%, transparent 70%)`,
-                  filter: 'blur(100px)'
-                }} 
-              />
-              <div className="neural-grid absolute inset-0 opacity-10" />
-              
-              {/* Content Overlay */}
-              <div className="absolute inset-0 p-10 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-8">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full border border-white/10 ring-4 ring-white/5 overflow-hidden">
-                        <img src={moment.creator.avatar} alt={moment.creator.name} className="w-full h-full object-cover" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold tracking-wide">{moment.creator.name}</p>
-                        <p className="text-[10px] font-mono text-gray-500 uppercase tracking-widest">{moment.creator.role}</p>
-                      </div>
+            {/* Immersive Media / Background */}
+            <div className="absolute inset-0 z-0">
+               <img 
+                 src={moment.mediaUrl} 
+                 alt={moment.title} 
+                 className="w-full h-full object-cover transform scale-105 blur-[2px] opacity-60 transition-transform duration-[10s] animate-pulse" 
+               />
+               <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
+               <div className="absolute inset-0 bg-radial-at-c from-transparent to-black/80" />
+               <div className="neural-grid absolute inset-0 opacity-10" />
+            </div>
+
+            {/* Content Overlay */}
+            <div className="relative z-10 w-full h-full flex flex-col justify-end p-6 md:p-12 pb-24 md:pb-12 max-w-7xl mx-auto">
+              <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 md:gap-16">
+                
+                {/* Left Side: Info */}
+                <div className="flex-1 space-y-6 max-w-2xl">
+                  <motion.div 
+                    initial={{ opacity: 0, x: -20 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    className="flex items-center gap-3"
+                  >
+                    <div className="w-12 h-12 rounded-2xl border-2 border-[#C5A059] p-0.5 overflow-hidden shadow-[0_0_15px_rgba(197,160,89,0.3)]">
+                      <img src={moment.creator.avatar} alt={moment.creator.name} className="w-full h-full object-cover rounded-xl" />
                     </div>
-                    <Badge className="bg-white/5 text-neural-accent hover:bg-white/10 font-mono text-[10px] tracking-widest uppercase py-1 px-3">
+                    <div>
+                      <h3 className="font-bold text-white text-lg flex items-center gap-2">
+                        {moment.creator.name}
+                        <Check className="w-3 h-3 bg-[#C5A059] text-black rounded-full" />
+                      </h3>
+                      <p className="text-[10px] font-mono text-neural-accent uppercase tracking-widest">{moment.creator.role}</p>
+                    </div>
+                  </motion.div>
+
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                  >
+                    <h2 className="text-4xl md:text-6xl font-display italic text-white leading-tight mb-4 drop-shadow-2xl">
+                      {moment.title}
+                    </h2>
+                    <p className="text-gray-300 text-sm md:text-lg leading-relaxed line-clamp-3 md:line-clamp-none font-light">
+                      {moment.description}
+                    </p>
+                  </motion.div>
+
+                  <div className="flex flex-wrap gap-2 pt-4">
+                    {moment.tags.map(tag => (
+                      <Badge key={tag} className="bg-white/10 hover:bg-white/20 text-white font-mono text-[9px] border-white/10 tracking-widest px-3 py-1">
+                        #{tag}
+                      </Badge>
+                    ))}
+                    <Badge className="bg-neural-accent text-black font-black text-[9px] tracking-widest px-3 py-1 uppercase">
                       {moment.type}
                     </Badge>
                   </div>
-
-                  <h2 className="text-4xl font-display italic text-white leading-tight mb-4 pr-12">
-                    {moment.title}
-                  </h2>
-                  <div className="flex gap-2 mb-6">
-                    {moment.tags.map(tag => (
-                      <span key={tag} className="text-[10px] font-mono text-gray-500 uppercase tracking-widest">#{tag}</span>
-                    ))}
-                  </div>
                 </div>
 
-                <div className="space-y-8">
-                  <div className="grid grid-cols-1 gap-6">
-                    <div className="glass-surface p-8 rounded-3xl border-neural-accent/20 relative overflow-hidden group">
-                      <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-30 transition-opacity">
-                         <TrendingUp className="w-20 h-20 text-neural-accent" />
-                      </div>
-                      <p className="text-[10px] font-mono text-neural-accent uppercase tracking-[0.4em] mb-2">{moment.metrics.label}</p>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-6xl font-display italic text-white tracking-tighter">{moment.metrics.val}</span>
-                        <ArrowUpRight className="w-6 h-6 text-neural-accent" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <p className="text-lg text-gray-400 font-light leading-relaxed max-w-lg">
-                    {moment.description}
-                  </p>
-
-                  <div className="flex items-center gap-8 border-t border-white/5 pt-8">
-                    <button 
+                {/* Right Side: Interaction Hub */}
+                <div className="flex md:flex-col items-center justify-center gap-6 md:gap-8 order-first md:order-last">
+                  <div className="flex flex-col items-center gap-1">
+                    <motion.button 
+                      whileTap={{ scale: 0.8 }}
                       onClick={() => handleLike(moment.id)}
-                      className="flex items-center gap-3 group"
+                      className={`p-4 md:p-5 rounded-full transition-all backdrop-blur-xl border ${
+                        isLiked[moment.id] 
+                        ? 'bg-red-500 border-red-400 shadow-[0_0_20px_rgba(239,68,68,0.4)]' 
+                        : 'bg-white/5 border-white/10 hover:bg-white/10'
+                      }`}
                     >
-                      <div className={`p-3 rounded-full transition-all ${isLiked[moment.id] ? 'bg-red-500/20 text-red-500' : 'bg-white/5 text-gray-400 group-hover:bg-white/10 group-hover:text-white'}`}>
-                        <Heart className={`w-6 h-6 ${isLiked[moment.id] ? 'fill-current' : ''}`} />
-                      </div>
-                      <span className={`text-sm font-bold ${isLiked[moment.id] ? 'text-red-500' : 'text-gray-400'}`}>{moment.likes + (isLiked[moment.id] ? 1 : 0)}</span>
+                      <Heart className={`w-6 h-6 md:w-8 md:h-8 ${isLiked[moment.id] ? 'fill-white text-white' : 'text-white'}`} />
+                    </motion.button>
+                    <span className="text-xs font-bold text-white/80 tabular-nums">{moment.likes + (isLiked[moment.id] ? 1 : 0)}</span>
+                  </div>
+
+                  <div className="flex flex-col items-center gap-1">
+                    <button className="p-4 md:p-5 rounded-full bg-white/5 border border-white/10 backdrop-blur-xl hover:bg-white/10 transition-all">
+                      <MessageSquare className="w-6 h-6 md:w-8 md:h-8 text-white" />
                     </button>
-                    <button className="flex items-center gap-3 group">
-                      <div className="p-3 rounded-full bg-white/5 text-gray-400 group-hover:bg-white/10 group-hover:text-white transition-all">
-                        <MessageSquare className="w-6 h-6" />
-                      </div>
-                      <span className="text-sm font-bold text-gray-400">{moment.comments}</span>
+                    <span className="text-xs font-bold text-white/80 tabular-nums">{moment.comments}</span>
+                  </div>
+
+                  <div className="flex flex-col items-center gap-1">
+                    <button className="p-4 md:p-5 rounded-full bg-white/5 border border-white/10 backdrop-blur-xl hover:bg-white/10 transition-all">
+                      <Share2 className="w-6 h-6 md:w-8 md:h-8 text-white" />
                     </button>
-                    <button className="flex items-center gap-3 group ml-auto">
-                      <div className="p-3 rounded-full bg-white/5 text-gray-400 group-hover:bg-white/10 group-hover:text-white transition-all">
-                        <Share2 className="w-6 h-6" />
-                      </div>
+                  </div>
+
+                  <div className="flex flex-col items-center gap-1">
+                    <button 
+                      onClick={() => setShowOpportunities(!showOpportunities)}
+                      className="p-4 md:p-5 rounded-full bg-neural-accent/20 border border-neural-accent/40 backdrop-blur-xl hover:bg-neural-accent/40 transition-all relative group"
+                    >
+                      <Brain className="w-6 h-6 md:w-8 md:h-8 text-neural-accent animate-pulse" />
+                      {suggestions.some(s => s.status === 'PENDING') && (
+                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-black animate-bounce" />
+                      )}
                     </button>
                   </div>
                 </div>
-              </div>
 
-              {/* Decorative side bar for verticality */}
-              <div className="absolute right-0 top-1/2 -translate-y-1/2 h-40 w-1 flex flex-col gap-1 pr-4">
-                 {[...Array(4)].map((_, i) => (
-                   <div key={i} className={`flex-1 w-px ${i === idx ? 'bg-neural-accent' : 'bg-white/10'}`} />
-                 ))}
               </div>
             </div>
-          </motion.div>
+
+            {/* Metric Floating Card */}
+            <motion.div 
+               initial={{ opacity: 0, scale: 0.8 }}
+               whileInView={{ opacity: 1, scale: 1 }}
+               className="absolute top-10 right-10 hidden lg:block"
+            >
+              <div className="glass-surface p-6 rounded-3xl border-[#C5A059]/30 border shadow-2xl relative overflow-hidden group">
+                 <div className="absolute inset-0 bg-neural-accent/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                 <p className="text-[10px] font-mono text-neural-accent uppercase tracking-widest mb-2">{moment.metrics.label}</p>
+                 <div className="flex items-center gap-3">
+                   <h4 className="text-4xl font-display italic text-white">{moment.metrics.val}</h4>
+                   <TrendingUp className="w-5 h-5 text-green-500" />
+                 </div>
+              </div>
+            </motion.div>
+          </section>
         ))}
       </div>
+
+      {/* Navigation Overlay Hints */}
+      <div className="absolute top-1/2 right-4 -translate-y-1/2 flex flex-col gap-4 z-20 pointer-events-none opacity-40">
+         <ChevronUp className="w-4 h-4 text-white animate-bounce" />
+         <div className="h-20 w-px bg-white/10 mx-auto" />
+         <ChevronDown className="w-4 h-4 text-white animate-bounce" />
+      </div>
+
+      {/* AI Discovery Button */}
+      <div className="absolute top-8 left-8 z-30 flex items-center gap-4">
+        <Button 
+          onClick={handleStrategicDiscovery}
+          disabled={isAnalyzing}
+          className="bg-neural-accent hover:bg-white text-black font-black text-[10px] h-12 px-6 rounded-2xl tracking-widest gap-2"
+        >
+          {isAnalyzing ? <Repeat className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+          {isAnalyzing ? 'SYNCHRONIZING TELEMETRY...' : 'INITIATE NEURAL SCAN'}
+        </Button>
+      </div>
+
+      {/* Opportunities Overlay Drawer */}
+      <AnimatePresence>
+        {showOpportunities && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowOpportunities(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-md z-40"
+            />
+            <motion.div 
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="absolute top-0 right-0 h-full w-full max-w-md bg-[#050505] border-l border-white/10 z-50 p-8 shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h2 className="text-2xl font-display italic text-white">Neural Insights</h2>
+                  <p className="text-[10px] font-mono text-neural-accent uppercase tracking-[0.3em]">Strategic Potential Matrix</p>
+                </div>
+                <button 
+                  onClick={() => setShowOpportunities(false)}
+                  className="p-3 rounded-full hover:bg-white/5 transition-colors"
+                >
+                  <X className="w-6 h-6 text-gray-500" />
+                </button>
+              </div>
+
+              <ScrollArea className="h-[calc(100vh-200px)] px-2">
+                <div className="space-y-6">
+                  {suggestions.filter(s => s.status === 'PENDING').map((suggestion) => (
+                    <motion.div
+                      key={suggestion.id}
+                      layout
+                      className="p-6 rounded-[2rem] bg-white/[0.03] border border-white/5 hover:border-neural-accent/50 transition-all group"
+                    >
+                      <div className="flex justify-between items-start mb-4">
+                        <Badge variant="outline" className="text-[9px] border-neural-accent/30 text-neural-accent px-3 py-1">
+                          {suggestion.sector}
+                        </Badge>
+                        <div className="flex gap-2">
+                          <Button 
+                            onClick={() => {
+                              toast.success(`Strategy Authorized: ${suggestion.title}`);
+                              updateDoc(doc(db, 'suggested_opportunities', suggestion.id), { status: 'ACCEPTED' });
+                            }} 
+                            variant="outline" 
+                            size="sm" 
+                            className="h-8 w-8 p-0 rounded-full border-green-500/20 text-green-500"
+                          >
+                            <Check className="w-4 h-4" />
+                          </Button>
+                          <Button 
+                            onClick={() => updateDoc(doc(db, 'suggested_opportunities', suggestion.id), { status: 'DECLINED' })}
+                            variant="outline" 
+                            size="sm" 
+                            className="h-8 w-8 p-0 rounded-full border-red-500/20 text-red-500"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <h4 className="text-xl font-bold text-white mb-2">{suggestion.title}</h4>
+                      <p className="text-sm text-gray-500 leading-relaxed mb-6">{suggestion.description}</p>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="p-4 rounded-2xl bg-black/40 border border-white/5">
+                          <p className="text-[8px] font-mono text-gray-600 uppercase mb-1">ROI Potential</p>
+                          <p className="text-lg font-bold text-white">{suggestion.potential}</p>
+                        </div>
+                        <div className="p-4 rounded-2xl bg-black/40 border border-white/5">
+                          <p className="text-[8px] font-mono text-gray-600 uppercase mb-1">Volatility</p>
+                          <p className="text-lg font-bold text-red-400">{suggestion.risk}</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                  {suggestions.filter(s => s.status === 'PENDING').length === 0 && (
+                    <div className="text-center py-20">
+                      <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/10">
+                         <Network className="w-8 h-8 text-gray-700" />
+                      </div>
+                      <p className="text-sm text-gray-500 italic">No new signals captured.</p>
+                      <button 
+                        onClick={handleStrategicDiscovery}
+                        className="mt-6 text-xs text-neural-accent underline underline-offset-4 font-bold"
+                      >
+                        RESCAN GLOBAL TELEMETRY
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -11,9 +11,15 @@ import {
   Globe,
   PieChart as PieChartIcon,
   MousePointer2,
-  Lock
+  Lock,
+  Brain,
+  Trash2,
+  AlertTriangle,
+  RefreshCcw,
+  ShieldAlert,
+  ChevronRight
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { 
   ResponsiveContainer, 
   BarChart, 
@@ -28,7 +34,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, collection, getDocs, deleteDoc, writeBatch, query, where } from 'firebase/firestore';
 import { auth, db } from '@/src/lib/firebase';
 import { toast } from 'sonner';
 import { trackEvent } from '@/src/lib/events';
@@ -57,12 +63,24 @@ interface SaaSOperationsProps {
 export default function SaaSOperations({ user, mode = 'full' }: SaaSOperationsProps) {
   const [tiers, setTiers] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [isResetting, setIsResetting] = React.useState(false);
 
   React.useEffect(() => {
+    setLoading(true);
     fetch('/api/billing/tiers')
-      .then(res => res.json())
+      .then(async res => {
+        if (!res.ok) throw new Error('CORE_BILLING_UNREACHABLE');
+        return res.json();
+      })
       .then(data => {
+        if (!Array.isArray(data)) throw new Error('MALFORMED_TIER_DATA');
         setTiers(data);
+      })
+      .catch(error => {
+        console.error('Tier fetch failed:', error);
+        toast.error('Failed to synchronize pricing tiers from central command');
+      })
+      .finally(() => {
         setLoading(false);
       });
   }, []);
@@ -70,13 +88,50 @@ export default function SaaSOperations({ user, mode = 'full' }: SaaSOperationsPr
   const handleUpgrade = async (tierId: string) => {
     if (!auth.currentUser) return;
     const userRef = doc(db, 'users', auth.currentUser.uid);
+    const toastId = toast.loading(`Initiating ${tierId.toUpperCase()} protocol...`);
+    
     try {
       await updateDoc(userRef, { plan: tierId });
-      toast.success(`SYSTEM UPDATED: ${tierId.toUpperCase()} ARCHITECTURE ACTIVE`);
+      toast.success(`SYSTEM UPDATED: ${tierId.toUpperCase()} ARCHITECTURE ACTIVE`, { id: toastId });
       trackEvent('subscription_upgrade' as any, { plan: tierId });
-      window.location.reload(); 
+      
+      // Clear cache and forced re-sync
+      setTimeout(() => window.location.reload(), 800);
     } catch (error) {
-      toast.error('Initialization failed');
+      console.error('Upgrade failed:', error);
+      toast.error('Initialization failed: Privilege escalation denied', { id: toastId });
+    }
+  };
+
+  const handleGlobalZero = async () => {
+    if (user.role !== 'CEO') {
+      toast.error('Privilege Insufficient: Only CEO can trigger Zero Protocol');
+      return;
+    }
+
+    const confirm = window.confirm('DANGER: This will wipe all your strategic data and reset your ledger to zero. This action is irreversible. Proceed?');
+    if (!confirm) return;
+
+    setIsResetting(true);
+    const toastId = toast.loading('Initiating Global Zero Protocol...');
+
+    try {
+      const batch = writeBatch(db);
+      
+      // Clear Investments
+      const invQuery = query(collection(db, 'investments'), where('ownerId', '==', user.uid));
+      const invSnap = await getDocs(invQuery);
+      invSnap.forEach(doc => batch.delete(doc.ref));
+
+      await batch.commit();
+      
+      toast.success('SYSTEM ZEROED: Neural matrix reset to baseline architecture', { id: toastId });
+      setTimeout(() => window.location.reload(), 2000);
+    } catch (error) {
+      console.error('Reset failed:', error);
+      toast.error('Zero Protocol failed: Integrity check rejection', { id: toastId });
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -429,6 +484,71 @@ export default function SaaSOperations({ user, mode = 'full' }: SaaSOperationsPr
           ))}
         </div>
       </div>
+
+      {user.role === 'CEO' && (
+        <div className="pt-12 mt-12 border-t border-red-900/20">
+          <div className="mb-6">
+            <h2 className="text-xl font-bold text-red-500 uppercase flex items-center gap-2">
+              <ShieldAlert className="w-5 h-5" />
+              Strategic Command Center
+            </h2>
+            <p className="text-xs text-gray-600 font-mono mt-1">High-privilege system overrides and global distribution parameters.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="bg-red-950/5 border-red-900/20">
+              <CardHeader>
+                <CardTitle className="text-sm font-mono uppercase text-red-500 flex items-center gap-2">
+                  <Trash2 className="w-4 h-4" />
+                  Protocol: Global Zero
+                </CardTitle>
+                <CardDescription className="text-[10px] text-gray-500">Wipe all current operational data and reset to fresh installation state.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-gray-600 leading-relaxed italic mb-4">
+                  "This action purges the entire neural ledger, including all investments, analysis, and strategic action plans associated with your UID. Required for fresh organizational deployment."
+                </p>
+                <Button 
+                  onClick={handleGlobalZero}
+                  disabled={isResetting}
+                  variant="destructive" 
+                  className="w-full h-11 bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white border border-red-600/20 font-black text-xs uppercase tracking-[0.2em]"
+                >
+                  {isResetting ? (
+                    <RefreshCcw className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 mr-2" />
+                  )}
+                  {isResetting ? 'EXECUTING PURGE...' : 'EXECUTE GLOBAL ZERO'}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-[#C5A059]/5 border-[#C5A059]/10">
+              <CardHeader>
+                <CardTitle className="text-sm font-mono uppercase text-[#C5A059] flex items-center gap-2">
+                  <Globe className="w-4 h-4" />
+                  Market Distribution
+                </CardTitle>
+                <CardDescription className="text-[10px] text-gray-500">Configure global availability and subscription licensing.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between p-3 rounded-lg border border-[#C5A059]/10 bg-black/40">
+                  <span className="text-[10px] font-mono uppercase text-gray-400">Public Marketplace</span>
+                  <Badge className="bg-green-500 text-black font-black text-[8px]">ACTIVE</Badge>
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-lg border border-[#C5A059]/10 bg-black/40">
+                  <span className="text-[10px] font-mono uppercase text-gray-400">Global API Gateway</span>
+                  <Badge className="bg-blue-500 text-white font-black text-[8px]">PROVISIONED</Badge>
+                </div>
+                <Button className="w-full h-11 bg-[#C5A059] hover:bg-[#A6864A] text-black font-black text-xs uppercase tracking-[0.2em] shadow-lg shadow-[#C5A059]/10 group">
+                  Deploy Global Modules <ChevronRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -8,7 +8,7 @@
         "uid": { "type": "string" },
         "email": { "type": "string", "format": "email" },
         "displayName": { "type": "string" },
-        "role": { "type": "string", "enum": ["CEO", "Admin", "User"] },
+        "role": { "type": "string", "enum": ["CEO", "Manager", "Staff"] },
         "plan": { "type": "string", "enum": ["free", "pro", "enterprise"] },
         "createdAt": { "type": "string", "format": "date-time" }
       },
@@ -52,9 +52,49 @@
         "title": { "type": "string" },
         "completed": { "type": "boolean" },
         "source": { "type": "string", "enum": ["MANUAL", "AI_CEO", "SYSTEM"] },
+        "dueDate": { "type": "string", "format": "date" },
         "investmentId": { "type": "string" },
         "ownerId": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ChatSession": {
+      "title": "Strategic Mission Session",
+      "description": "Metadata for a group of chat interactions.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "summary": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "AIChat": {
+      "title": "Neural Matrix Interaction",
+      "description": "Individual message in a strategic chat.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "ai"] },
+        "content": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "analysis": { "type": "object" }
+      }
+    },
+    "OpportunitySuggestion": {
+      "title": "Neural Discovery Opportunity",
+      "description": "AI suggested investment cluster or opportunity.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "sector": { "type": "string" },
+        "description": { "type": "string" },
+        "potential": { "type": "string" },
+        "risk": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "ACCEPTED", "DECLINED"] },
+        "suggestedAt": { "type": "string", "format": "date-time" }
       }
     }
   },
@@ -71,6 +111,14 @@
       "schema": "ActionItem",
       "description": "Sub-tasks for specific investments."
     },
+    "/chat_sessions/{sessionId}": {
+      "schema": "ChatSession",
+      "description": "Mission session logs."
+    },
+    "/ai_chats/{chatId}": {
+      "schema": "AIChat",
+      "description": "Individual neural interaction logs."
+    },
     "/metrics/global": {
       "schema": "Metric",
       "description": "Global SaaS platform metrics."
@@ -78,6 +126,10 @@
     "/actions/{actionId}": {
       "schema": "Action",
       "description": "Log of autonomous AI actions."
+    },
+    "/suggested_opportunities/{oppId}": {
+      "schema": "OpportunitySuggestion",
+      "description": "AI suggested investment nodes."
     }
   }
 }

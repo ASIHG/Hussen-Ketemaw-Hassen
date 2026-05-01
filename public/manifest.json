@@ -1,18 +1,45 @@
 {
-  "name": "AFRO SPACE AI MULTI-CLUSTER PLATFORM",
-  "short_name": "AfroSpace",
-  "description": "Global Enterprise Strategy & AI Command Center for Multi-Cluster Business Operations",
+  "name": "NEXUS UNIVERSE SOVEREIGN PROTOCOL",
+  "short_name": "Nexus",
+  "description": "The world's first Sovereign All-In-One Protocol. Organizational mastery from beginning to end.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#020202",
+  "background_color": "#050505",
   "theme_color": "#C5A059",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/logo.png",
+      "src": "https://img.icons8.com/isometric/512/globe.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "https://img.icons8.com/isometric/192/globe.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "url": "/?view=dashboard",
+      "icons": [{ "src": "https://img.icons8.com/isometric/96/home.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Nexus Hub",
+      "url": "/?view=nexus",
+      "icons": [{ "src": "https://img.icons8.com/isometric/96/globe.png", "sizes": "96x96" }]
+    }
+  ],
+  "categories": ["productivity", "business", "world"],
+  "screenshots": [
+    {
+      "src": "https://img.icons8.com/isometric/1024/monitor.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "form_factor": "wide"
     }
   ]
 }

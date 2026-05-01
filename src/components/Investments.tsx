@@ -25,7 +25,8 @@ import {
   Loader2,
   Brain,
   User as UserIcon,
-  ListTodo
+  ListTodo,
+  Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getAIInsight } from '../lib/gemini';
@@ -87,6 +88,7 @@ interface ActionItem {
   title: string;
   completed: boolean;
   source: 'MANUAL' | 'AI_CEO' | 'SYSTEM';
+  dueDate?: string;
   createdAt: any;
 }
 
@@ -97,6 +99,7 @@ export default function Investments({ user }: { user: any }) {
   const [open, setOpen] = useState(false);
   const [focusedInvestment, setFocusedInvestment] = useState<Investment | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [actionToDelete, setActionToDelete] = useState<ActionItem | null>(null);
   const [comparisonIds, setComparisonIds] = useState<string[]>([]);
   const [showComparison, setShowComparison] = useState(false);
   
@@ -116,6 +119,11 @@ export default function Investments({ user }: { user: any }) {
   const [generatingActions, setGeneratingActions] = useState(false);
   const [selectedSourceFilter, setSelectedSourceFilter] = useState<'ALL' | 'MANUAL' | 'AI_CEO' | 'SYSTEM'>('ALL');
   const [newItemSource, setNewItemSource] = useState<'MANUAL' | 'AI_CEO' | 'SYSTEM'>('MANUAL');
+  const [newActionDueDate, setNewActionDueDate] = useState('');
+  const [editingAction, setEditingAction] = useState<ActionItem | null>(null);
+  const [editActionTitle, setEditActionTitle] = useState('');
+  const [editActionDueDate, setEditActionDueDate] = useState('');
+  const [editActionSource, setEditActionSource] = useState<'MANUAL' | 'AI_CEO' | 'SYSTEM'>('MANUAL');
 
   // AI Prediction State
   const [prediction, setPrediction] = useState<any>(null);
@@ -128,6 +136,19 @@ export default function Investments({ user }: { user: any }) {
   const [newROI, setNewROI] = useState('0');
   const [newGrowthRate, setNewGrowthRate] = useState('0');
   const [newRiskScore, setNewRiskScore] = useState('0');
+  const [acceptedOpportunities, setAcceptedOpportunities] = useState<string[]>([]);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, 'suggested_opportunities'),
+      where('status', '==', 'ACCEPTED')
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const titles = snapshot.docs.map(doc => doc.data().title);
+      setAcceptedOpportunities(titles);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     const q = query(
@@ -194,12 +215,28 @@ RISKS: [Identify the top 2-3 specific risks for this type of asset]
 CONFIDENCE: [A number between 85-99]`;
 
       const insight = await getAIInsight(prompt);
+      if (!insight || insight.trim().length < 10) {
+        throw new Error('NEURAL_DATA_MISHAP');
+      }
+
       setAiInsights(prev => ({ ...prev, [item.id]: insight }));
       setExpandedInsights(prev => new Set(prev).add(item.id));
       toast.success(`Analysis complete for ${item.title}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('AI Analysis failed:', error);
-      toast.error('Neural engine failed to generate insight');
+      let userMsg = 'Neural engine failed to generate insight.';
+      
+      if (error.message?.includes('quota')) {
+        userMsg = 'Neural capacity reached. Please wait for core cooling.';
+      } else if (error.message === 'NEURAL_DATA_MISHAP') {
+        userMsg = 'Received fragmented neural data. Re-analysis recommended.';
+      } else if (!window.navigator.onLine) {
+        userMsg = 'Link severed. Matrix offline.';
+      }
+
+      toast.error(userMsg, {
+        description: 'System identifier: AI_ANALYSIS_FAILED'
+      });
     } finally {
       setAnalyzingIds(prev => {
         const next = new Set(prev);
@@ -226,12 +263,14 @@ Generate exactly 3 specific, high-impact actionable tasks (max 10 words each) to
 Return as a simple bulleted list starting with '-'.`;
 
       const result = await getAIInsight(prompt);
+      if (!result) throw new Error('EMPTY_STRATEGY_STREAM');
+
       const actions = result.split('\n')
         .filter(line => line.trim().startsWith('-'))
         .map(line => line.trim().replace(/^-/, '').trim())
         .slice(0, 3);
 
-      if (actions.length === 0) throw new Error('No actions generated');
+      if (actions.length === 0) throw new Error('NO_STRATEGY_DECODED');
 
       for (const actionTitle of actions) {
         await addDoc(collection(db, 'investments', item.id, 'action_items'), {
@@ -244,9 +283,17 @@ Return as a simple bulleted list starting with '-'.`;
         });
       }
       toast.success('AI strategic items integrated into ledger', { id: toastId });
-    } catch (error) {
+    } catch (error: any) {
       console.error('AI Action Gen Error:', error);
-      toast.error('AI action generation failed', { id: toastId });
+      let errorMsg = 'AI action generation failed.';
+      
+      if (error.message === 'EMPTY_STRATEGY_STREAM') {
+        errorMsg = 'Zero-bit strategy stream detected. Neural re-alignment required.';
+      } else if (error.message === 'NO_STRATEGY_DECODED') {
+        errorMsg = 'Strategic patterns could not be decoded from neural stream.';
+      }
+      
+      toast.error(errorMsg, { id: toastId });
     } finally {
       setGeneratingActions(false);
     }
@@ -254,18 +301,22 @@ Return as a simple bulleted list starting with '-'.`;
 
   const handleAddAction = async () => {
     if (!newActionTitle.trim() || !focusedInvestment) return;
+    const path = `investments/${focusedInvestment.id}/action_items`;
     try {
       await addDoc(collection(db, 'investments', focusedInvestment.id, 'action_items'), {
         title: newActionTitle.trim(),
         completed: false,
         source: newItemSource,
+        dueDate: newActionDueDate || null,
         investmentId: focusedInvestment.id,
         ownerId: user.uid,
         createdAt: serverTimestamp()
       });
       setNewActionTitle('');
+      setNewActionDueDate('');
       toast.success('Action item linked to asset');
     } catch (error) {
+       handleFirestoreError(error, OperationType.CREATE, path);
        toast.error('Failed to add action item');
     }
   };
@@ -283,35 +334,74 @@ Return as a simple bulleted list starting with '-'.`;
           historicalData: [] // Would pass actual data here
         })
       });
-      if (!res.ok) throw new Error("API failed");
+      
+      if (!res.ok) {
+        if (res.status === 404) throw new Error('PREDICTION_NODE_MISSING');
+        if (res.status === 503) throw new Error('PREDICTION_ENGINE_OFFLINE');
+        throw new Error("PREDICTION_API_FAILURE");
+      }
+
       const data = await res.json();
+      if (!data || typeof data !== 'object') throw new Error('MALFORMED_PREDICTION_DATA');
+      
       setPrediction(data);
       toast.success(`Predictions loaded for ${item.title}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Prediction Error:", error);
-      toast.error('Prediction Engine failed to gather historical data');
+      let errMsg = 'Prediction Engine failed to gather historical data.';
+      
+      if (error.message === 'PREDICTION_NODE_MISSING') {
+        errMsg = 'Neural prediction node not found for this asset.';
+      } else if (error.message === 'PREDICTION_ENGINE_OFFLINE') {
+        errMsg = 'Prediction engine is currently undergoing maintenance.';
+      } else if (error.message === 'MALFORMED_PREDICTION_DATA') {
+        errMsg = 'Received invalid telemetry data from predictive core.';
+      }
+
+      toast.error(errMsg);
     } finally {
       setPredictingForecast(false);
     }
   };
 
+  const handleUpdateAction = async () => {
+    if (!editingAction || !focusedInvestment || !editActionTitle.trim()) return;
+    const path = `investments/${focusedInvestment.id}/action_items/${editingAction.id}`;
+    try {
+      await updateDoc(doc(db, 'investments', focusedInvestment.id, 'action_items', editingAction.id), {
+        title: editActionTitle.trim(),
+        dueDate: editActionDueDate || null,
+        source: editActionSource
+      });
+      setEditingAction(null);
+      toast.success('Action requirement updated');
+    } catch (error) {
+       handleFirestoreError(error, OperationType.UPDATE, path);
+       toast.error('Failed to update action');
+    }
+  };
+
   const toggleAction = async (action: ActionItem) => {
     if (!focusedInvestment) return;
+    const path = `investments/${focusedInvestment.id}/action_items/${action.id}`;
     try {
       await updateDoc(doc(db, 'investments', focusedInvestment.id, 'action_items', action.id), {
         completed: !action.completed
       });
     } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
       toast.error('Failed to update task state');
     }
   };
 
   const deleteAction = async (actionId: string) => {
     if (!focusedInvestment) return;
+    const path = `investments/${focusedInvestment.id}/action_items/${actionId}`;
     try {
       await deleteDoc(doc(db, 'investments', focusedInvestment.id, 'action_items', actionId));
       toast.success('Task removed');
     } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
       toast.error('Failed to remove task');
     }
   };
@@ -629,6 +719,9 @@ Return as a simple bulleted list starting with '-'.`;
                       <option>Agriculture</option>
                       <option>Logistics</option>
                       <option>Energy</option>
+                      {acceptedOpportunities.map(opp => (
+                        <option key={opp} value={opp}>{opp}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -1563,9 +1656,15 @@ Return as a simple bulleted list starting with '-'.`;
                               placeholder="Add strategic requirement..."
                               className="bg-black/50 border-white/10 h-9 text-xs"
                             />
+                            <Input 
+                              type="date"
+                              value={newActionDueDate}
+                              onChange={(e) => setNewActionDueDate(e.target.value)}
+                              className="bg-black/50 border-white/10 h-9 text-xs w-32"
+                            />
                             <Button 
                               onClick={handleAddAction}
-                              className="bg-[#C5A059] hover:bg-[#A6864A] text-black h-9 px-3"
+                              className="bg-[#C5A059] hover:bg-[#A6864A] text-black h-9 px-3 shrink-0"
                             >
                               <Plus className="w-4 h-4" />
                             </Button>
@@ -1606,46 +1705,79 @@ Return as a simple bulleted list starting with '-'.`;
                                     animate={{ opacity: 1, x: 0 }}
                                     exit={{ opacity: 0, scale: 0.95 }}
                                     className={`group flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border transition-all ${
-                                      action.completed ? 'border-transparent opacity-60' : 'border-white/5 hover:border-white/10'
+                                      action.completed ? 'border-transparent opacity-60' : 'border-white/5 hover:border-white/10 shadow-sm'
+                                    } ${
+                                      action.source === 'AI_CEO' ? 'border-l-4 border-l-purple-500/50' :
+                                      action.source === 'SYSTEM' ? 'border-l-4 border-l-blue-500/50' :
+                                      'border-l-4 border-l-gray-600/50'
                                     }`}
                                   >
                                     <div className="flex items-center gap-3">
-                                      <button 
-                                        onClick={() => toggleAction(action)}
-                                        className={`w-5 h-5 rounded flex items-center justify-center transition-all border ${
-                                          action.completed 
-                                          ? 'bg-[#C5A059] border-[#C5A059] text-black' 
-                                          : 'bg-black/40 border-white/20 text-transparent hover:border-[#C5A059]/50'
-                                        }`}
-                                      >
-                                        <Check className="w-3 h-3" strokeWidth={4} />
-                                      </button>
+                                      <div className="flex flex-col items-center gap-1 shrink-0">
+                                        <button 
+                                          onClick={() => toggleAction(action)}
+                                          className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all border shadow-inner ${
+                                            action.completed 
+                                            ? 'bg-[#C5A059] border-[#C5A059] text-black scale-95' 
+                                            : 'bg-black/40 border-white/20 text-transparent hover:border-[#C5A059]/50 hover:scale-105'
+                                          }`}
+                                        >
+                                          <Check className="w-3.5 h-3.5" strokeWidth={4} />
+                                        </button>
+                                      </div>
                                       <div className="space-y-0.5">
-                                        <p className={`text-sm tracking-tight ${action.completed ? 'line-through text-gray-600' : 'text-gray-200'}`}>
-                                          {action.title}
-                                        </p>
                                         <div className="flex items-center gap-2">
-                                          <div className={`flex items-center gap-1 text-[8px] font-mono font-bold px-1.5 py-0.5 rounded uppercase ${
-                                            action.source === 'AI_CEO' ? 'text-purple-400 bg-purple-400/5' :
-                                            action.source === 'SYSTEM' ? 'text-blue-400 bg-blue-400/5' :
-                                            'text-gray-500 bg-gray-500/5'
-                                          }`}>
-                                            {action.source === 'AI_CEO' && <Brain className="w-2 h-2" />}
-                                            {action.source === 'SYSTEM' && <Activity className="w-2 h-2" />}
-                                            {action.source === 'MANUAL' && <UserIcon className="w-2 h-2" />}
-                                            {action.source}
+                                          <p className={`text-sm font-medium tracking-tight ${action.completed ? 'line-through text-gray-600' : 'text-gray-100'}`}>
+                                            {action.title}
+                                          </p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <div className={`flex items-center gap-1.5 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full uppercase border transition-all duration-500 shadow-sm ${
+                                            action.source === 'AI_CEO' ? 'text-purple-400 bg-purple-400/10 border-purple-400/20 shadow-purple-500/5 pulse-subtle' :
+                                            action.source === 'SYSTEM' ? 'text-blue-400 bg-blue-400/10 border-blue-400/20 shadow-blue-500/5' :
+                                            'text-gray-400 bg-gray-400/10 border-gray-400/20'
+                                          }`} title={
+                                            action.source === 'AI_CEO' ? 'Generated by Nexus Neural Engine' :
+                                            action.source === 'SYSTEM' ? 'Automated System Protocol' :
+                                            'Manually defined requirement'
+                                          }>
+                                            {action.source === 'AI_CEO' && <Brain className="w-2.5 h-2.5 animate-pulse" />}
+                                            {action.source === 'SYSTEM' && <Activity className="w-2.5 h-2.5" />}
+                                            {action.source === 'MANUAL' && <UserIcon className="w-2.5 h-2.5 opacity-60" />}
+                                            {action.source.replace('_', ' ')}
                                           </div>
+                                          {action.dueDate && (
+                                            <div className="flex items-center gap-1.5 text-[9px] font-mono text-[#C5A059] bg-[#C5A059]/10 px-2 py-0.5 rounded-full border border-[#C5A059]/20">
+                                              <Calendar className="w-2.5 h-2.5" />
+                                              <span>{new Date(action.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                                            </div>
+                                          )}
                                         </div>
                                       </div>
                                     </div>
-                                    <Button 
-                                      variant="ghost" 
-                                      size="icon" 
-                                      onClick={() => deleteAction(action.id)}
-                                      className="w-8 h-8 opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-500 hover:bg-red-500/10 transition-all"
-                                    >
-                                      <X className="w-3.5 h-3.5" />
-                                    </Button>
+                                    <div className="flex items-center gap-1.5 px-2">
+                                      <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        onClick={() => {
+                                          setEditingAction(action);
+                                          setEditActionTitle(action.title);
+                                          setEditActionDueDate(action.dueDate || '');
+                                          setEditActionSource(action.source);
+                                        }}
+                                        className="w-8 h-8 text-gray-500 hover:text-[#C5A059] hover:bg-[#C5A059]/10 transition-all rounded-full"
+                                      >
+                                        <Edit3 className="w-3.5 h-3.5" />
+                                      </Button>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        onClick={() => setActionToDelete(action)}
+                                        className="w-8 h-8 text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-all rounded-full"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </Button>
+                                    </div>
                                   </motion.div>
                                 ))}
                               </div>
@@ -1850,6 +1982,97 @@ Return as a simple bulleted list starting with '-'.`;
                 <Button variant="ghost" onClick={() => setShowComparison(false)}>Close View</Button>
                 <Button className="bg-[#C5A059] hover:bg-[#A6864A] text-black font-bold">
                   Export Strategic Summary
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={!!editingAction} onOpenChange={(open) => !open && setEditingAction(null)}>
+            <DialogContent className="bg-[#0a0a0a] border-[#1a1a1a] text-white">
+              <DialogHeader>
+                  <DialogTitle className="text-xl font-bold tracking-tight flex items-center gap-2">
+                    <Edit3 className="w-5 h-5 text-[#C5A059]" />
+                    Update Strategic Requirement
+                  </DialogTitle>
+                  <DialogDescription className="text-xs font-mono uppercase tracking-widest text-gray-500">Refine core organizational protocol for this asset</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-6 py-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-mono uppercase text-gray-600 tracking-widest font-bold">Requirement Title</label>
+                    <Input 
+                      value={editActionTitle} 
+                      onChange={(e) => setEditActionTitle(e.target.value)} 
+                      className="bg-black/40 border-white/5 h-12 focus:border-[#C5A059]/50 transition-all rounded-xl"
+                      placeholder="Define the task..."
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-mono uppercase text-gray-600 tracking-widest font-bold">Sovereign Deadline</label>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                        <Input 
+                          type="date" 
+                          value={editActionDueDate} 
+                          onChange={(e) => setEditActionDueDate(e.target.value)} 
+                          className="bg-black/40 border-white/5 h-12 pl-10 focus:border-[#C5A059]/50 transition-all rounded-xl" 
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-mono uppercase text-gray-600 tracking-widest font-bold">Intelligence Source</label>
+                      <div className="relative">
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none">
+                          {editActionSource === 'AI_CEO' ? <Brain className="w-4 h-4" /> : 
+                           editActionSource === 'SYSTEM' ? <Activity className="w-4 h-4" /> : 
+                           <UserIcon className="w-4 h-4" />}
+                        </div>
+                        <select 
+                          value={editActionSource} 
+                          onChange={(e) => setEditActionSource(e.target.value as any)}
+                          className="w-full h-12 bg-black/40 border border-white/5 rounded-xl pl-10 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-[#C5A059]/50 transition-all appearance-none"
+                        >
+                          <option value="MANUAL">MANUAL OVERRIDE</option>
+                          <option value="AI_CEO">NEURAL AI_CEO</option>
+                          <option value="SYSTEM">PROTOCOL_SYSTEM</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter className="pt-2">
+                  <Button onClick={handleUpdateAction} className="w-full bg-[#C5A059] hover:bg-white text-black font-black h-14 rounded-2xl shadow-xl shadow-[#C5A059]/10 transition-all">
+                    SYNC TO GLOBAL LEDGER
+                  </Button>
+                </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={!!actionToDelete} onOpenChange={(open) => !open && setActionToDelete(null)}>
+            <DialogContent className="bg-[#0a0a0a] border-[#1a1a1a] text-white max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-red-500 mb-2">
+                  <ShieldAlert className="w-5 h-5" />
+                  Purge Task Protocol
+                </DialogTitle>
+                <DialogDescription className="text-gray-500 font-mono text-xs uppercase tracking-wider">
+                  Are you sure you want to remove "{actionToDelete?.title}" from the strategic ledger? This deletion is permanent.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="mt-6 flex gap-3">
+                <Button variant="ghost" onClick={() => setActionToDelete(null)} className="flex-1 border-white/5 hover:bg-white/5 uppercase font-mono text-[10px]">
+                  Abort
+                </Button>
+                <Button 
+                  onClick={async () => {
+                    if (actionToDelete) {
+                      await deleteAction(actionToDelete.id);
+                      setActionToDelete(null);
+                    }
+                  }} 
+                  className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold uppercase font-mono text-[10px]"
+                >
+                  Confirm Purge
                 </Button>
               </DialogFooter>
             </DialogContent>
